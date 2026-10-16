@@ -23,6 +23,7 @@ from ..schemas import (
 from ..services.auth_service import AuthService
 from ..services.cv_service import CVService
 from ..services.inference_service import InferenceService
+from ..services.cloudinary_service import CloudinaryService
 from ..services.suitability_service import SuitabilityService
 from ..services.advisory_service import AdvisoryService
 from ..services.weather_service import WeatherService
@@ -225,7 +226,27 @@ async def submit_scan(
     except Exception as e:
         logger.warning(f"Image dimension check error: {str(e)}")
 
-    image_url = f"/uploads/{safe_filename}"
+    # -------------------------------------------------------------------------
+    # 3a. Upload to Cloudinary (if configured) or keep local /uploads/ URL
+    # -------------------------------------------------------------------------
+    if settings.USE_CLOUDINARY:
+        cloudinary_url = CloudinaryService.upload_image(
+            file_path=file_path,
+            public_id=scan_id  # e.g. s_abc123 — stored under agroguard/scans/
+        )
+        if cloudinary_url:
+            image_url = cloudinary_url
+            # Remove temp local file — permanent copy is on Cloudinary CDN
+            try:
+                os.remove(file_path)
+            except Exception:
+                pass
+        else:
+            # Cloudinary upload failed — keep local file as fallback
+            logger.warning(f"Cloudinary upload failed for scan {scan_id}. Using local storage fallback.")
+            image_url = f"/uploads/{safe_filename}"
+    else:
+        image_url = f"/uploads/{safe_filename}"
     scan_timestamp = datetime.utcnow()
 
     # 4. Location & Agro-Climatic Suitability Assessment

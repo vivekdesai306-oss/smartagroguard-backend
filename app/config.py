@@ -14,7 +14,17 @@ class Settings:
     GROWTH_STAGE_MODEL_PATH: str = os.getenv("GROWTH_STAGE_MODEL_PATH", "app/ml_models/growth_stage_model.pt")
     DISEASE_MODEL_PATH: str = os.getenv("DISEASE_MODEL_PATH", "app/ml_models/disease_model.pt")
     DEMO_MODE: bool = os.getenv("DEMO_MODE", "false").lower() == "true"
-    
+
+    # Cloudinary image storage (set all three to enable cloud uploads)
+    CLOUDINARY_CLOUD_NAME: str = os.getenv("CLOUDINARY_CLOUD_NAME", "")
+    CLOUDINARY_API_KEY: str = os.getenv("CLOUDINARY_API_KEY", "")
+    CLOUDINARY_API_SECRET: str = os.getenv("CLOUDINARY_API_SECRET", "")
+    USE_CLOUDINARY: bool = bool(
+        os.getenv("CLOUDINARY_CLOUD_NAME") and
+        os.getenv("CLOUDINARY_API_KEY") and
+        os.getenv("CLOUDINARY_API_SECRET")
+    )
+
     UPLOAD_DIR: str = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
 
     # Module 4: Temporal Analytics Configuration

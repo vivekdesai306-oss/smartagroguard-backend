@@ -7,6 +7,7 @@ import logging
 from .config import settings
 from .database import Database
 from .services.inference_service import InferenceService
+from .services.cloudinary_service import CloudinaryService
 from .routers import auth, farms, scans, suitability, advisory, history, weather, dosage, irrigation, reminders, harvest, lifecycle
 
 # Setup logging
@@ -43,7 +44,10 @@ app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 async def startup_event():
     logger.info("Initializing database connection...")
     Database.connect_db()
-    
+
+    logger.info("Configuring Cloudinary image storage...")
+    CloudinaryService.configure()
+
     logger.info("Pre-loading PyTorch models...")
     InferenceService.load_models()
     logger.info("Startup sequence complete.")
