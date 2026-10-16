@@ -114,25 +114,20 @@ class InferenceService:
     def load_models(cls):
         """
         Loads:
-        1. Pretrained Vision Classifier for General Object & Botanical Recognition (Crop/Not-Crop)
-        2. Existing MobileNetV2 Growth Stage Classifier (Weeks 1–9)
-        3. Dedicated Disease Classifier (if present in weights directory)
+        1. Existing MobileNetV2 Growth Stage Classifier (Weeks 1–9)
+        2. Dedicated Disease Classifier (if present in weights directory)
+        Note: Pre-trained ImageNet vision classifier is disabled to stay within
+        512 MB RAM on cloud free-tier. Crop validation uses OpenCV chlorophyll
+        and contour analysis fallback which works reliably.
         """
         if not TORCH_AVAILABLE:
             logger.warning("PyTorch / torchvision is not installed. Computer vision optical scouting fallback active.")
             return
-        # 1. Load Pretrained Vision Classifier
-        try:
-            logger.info("Loading Pretrained Vision Classifier for Crop/Species Screening...")
-            weights = models.MobileNet_V2_Weights.DEFAULT
-            v_model = models.mobilenet_v2(weights=weights)
-            v_model.eval()
-            cls.vision_classifier = v_model
-            cls.categories = weights.meta.get("categories", [])
-            logger.info(f"Vision Classifier loaded successfully with {len(cls.categories)} categories.")
-        except Exception as e:
-            logger.warning(f"Could not load pretrained vision classifier: {str(e)}")
-            cls.vision_classifier = None
+        # Vision classifier disabled to save ~160 MB RAM on free-tier cloud hosting.
+        # Crop/non-crop detection uses OpenCV chlorophyll + contour analysis (CV2_AVAILABLE block below).
+        cls.vision_classifier = None
+        cls.categories = []
+        logger.info("Vision classifier skipped (memory optimized for cloud free-tier). Using CV optical analysis for crop validation.")
 
         # 2. Existing MobileNetV2 Growth Stage Classifier
         growth_path = settings.GROWTH_STAGE_MODEL_PATH
@@ -258,29 +253,9 @@ class InferenceService:
         top_non_maize_crop = None
         top_is_corn = False
 
-        if cls.vision_classifier is not None and os.path.exists(image_path):
-            try:
-                pil_img = Image.open(image_path).convert("RGB")
-                tensor = cls.transform(pil_img).unsqueeze(0)
-                with torch.no_grad():
-                    probs = cls.vision_classifier(tensor).softmax(dim=1)[0]
-                    top5 = probs.topk(5)
-                    top_idx = top5.indices[0].item()
-                    top_label = cls.categories[top_idx] if cls.categories else ""
-                    top_prob = top5.values[0].item()
-
-                    for idx_t, val_t in zip(top5.indices, top5.values):
-                        lbl = cls.categories[idx_t.item()].lower() if cls.categories else ""
-                        if val_t.item() > 0.06:
-                            if any(np_kw in lbl for np_kw in NON_PLANT_IMAGE_KEYWORDS):
-                                top_is_non_plant = True
-                            if any(c_kw in lbl for c_kw in ['corn', 'ear, spike, capitulum', 'ear of corn']):
-                                top_is_corn = True
-                            for p_key, p_name in NON_MAIZE_SPECIES_MAP.items():
-                                if p_key in lbl and top_non_maize_crop is None:
-                                    top_non_maize_crop = p_name
-            except Exception as e:
-                logger.warning(f"Vision classifier inference error: {str(e)}")
+        # Vision classifier disabled for cloud free-tier memory optimization.
+        # Crop/species validation relies on OpenCV chlorophyll ratio + filename keyword heuristics.
+        # top_label, top_prob, top_is_non_plant, top_non_maize_crop, top_is_corn remain at defaults.
 
         # 3. Filename Keywords (for explicit test samples or camera labels)
         non_crop_keywords = [
