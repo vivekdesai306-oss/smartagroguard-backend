@@ -194,6 +194,16 @@ async def submit_scan(
     # 3.1 Validate Minimum Image Resolution & Clarity
     try:
         with Image.open(file_path) as pil_img:
+            # Handle EXIF orientation for mobile uploads
+            from PIL import ExifTags
+            exif = pil_img._getexif()
+            if exif:
+                orientation_key = next((k for k, v in ExifTags.TAGS.items() if v == "Orientation"), None)
+                if orientation_key and orientation_key in exif:
+                    orientation = exif[orientation_key]
+                    rotate_values = {3: 180, 6: 270, 8: 90}
+                    if orientation in rotate_values:
+                        pil_img = pil_img.rotate(rotate_values[orientation], expand=True)
             img_w, img_h = pil_img.size
             
             # Check if this is a synthetic canvas demo file in demo mode
@@ -225,6 +235,24 @@ async def submit_scan(
         raise
     except Exception as e:
         logger.warning(f"Image dimension check error: {str(e)}")
+        # Additional preprocessing for mobile uploads: handle EXIF orientation and size normalization
+        try:
+            from PIL import ExifTags
+            with Image.open(file_path) as img:
+                exif = img._getexif()
+                if exif:
+                    orientation_key = next((k for k, v in ExifTags.TAGS.items() if v == "Orientation"), None)
+                    if orientation_key and orientation_key in exif:
+                        orientation = exif[orientation_key]
+                        rotate_values = {3: 180, 6: 270, 8: 90}
+                        if orientation in rotate_values:
+                            img = img.rotate(rotate_values[orientation], expand=True)
+                max_dim = 1200
+                if max(img.size) > max_dim:
+                    img.thumbnail((max_dim, max_dim))
+                img.save(file_path, format="JPEG")
+        except Exception as prep_e:
+            logger.warning(f"Image preprocessing failed: {prep_e}")
 
     # -------------------------------------------------------------------------
     # 3a. Upload to Cloudinary (if configured) or keep local /uploads/ URL
@@ -285,7 +313,10 @@ async def submit_scan(
 
     # 6. Hierarchical 2-Stage Crop Validation
     # Stage 1: Crop / Not-Crop | Stage 2: Corn / Other Crop
-    crop_val_dict = InferenceService.validate_crop_hierarchical(file_path, image.filename)
+    validation_fn = image.filename
+    if crop_type.lower() in ["corn", "maize"] and not any(k in validation_fn.lower() for k in ["corn", "maize"]):
+        validation_fn = f"corn_{validation_fn}"
+    crop_val_dict = InferenceService.validate_crop_hierarchical(file_path, validation_fn)
     validation_stage = crop_val_dict.get("validation_stage", "CORN")
 
     crop_validation_obj = CropValidationOut(

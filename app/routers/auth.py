@@ -44,7 +44,11 @@ async def register(user_data: UserRegister, db: AsyncIOMotorDatabase = Depends(g
 
 @router.post("/login", response_model=Token)
 async def login(user_credentials: UserLogin, db: AsyncIOMotorDatabase = Depends(get_database)):
-    user = await db["users"].find_one({"email": user_credentials.email})
+    clean_email = (user_credentials.email or "").strip().lower()
+    user = await db["users"].find_one({"email": clean_email})
+    if not user:
+        # Case-insensitive fallback for mobile keyboards
+        user = await db["users"].find_one({"email": {"$regex": f"^{clean_email}$", "$options": "i"}})
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
